@@ -81,7 +81,6 @@ public class BookingController {
 		return ResponseEntity.ok(ApiResponse.success("查詢成功", bookingDtos));
 	}
 	
-	
 	@GetMapping(params = "phone")
 	public ResponseEntity<ApiResponse<List<BookingDto>>> getBookingByPhone(@RequestParam String phone) {
 		List<BookingDto> bookingDtos = bookingService.getBookingsByPhone(phone);
