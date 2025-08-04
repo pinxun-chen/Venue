@@ -7,8 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.example.demo.model.entity.Booking;
 
-import jakarta.persistence.Query;
-
 public interface BookingRepository extends JpaRepository<Booking, Integer> {
 
 	// 用 email 查詢預約紀錄

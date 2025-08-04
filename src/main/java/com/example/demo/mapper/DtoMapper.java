@@ -63,7 +63,7 @@ public class DtoMapper {
     // venueTime 轉 venueTimeDto
     public VenueTimeDto toVenueTimeDto(VenueTime vt) {
         VenueTimeDto dto = new VenueTimeDto();
-        dto.setId(vt.getId());
+        dto.setId(vt.getTimeSlot().getId());
         dto.setVenueId(vt.getVenue().getId());
         dto.setTimeSlotId(vt.getTimeSlot().getId());
         dto.setTimeLabel(vt.getTimeSlot().getLabel());
