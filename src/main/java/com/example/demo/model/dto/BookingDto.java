@@ -16,5 +16,6 @@ public class BookingDto {
 	private Boolean isPaid;
 	private String createdAt;
 	private String venueName;
+	private Integer venuePrice;
 	private String label;
 }

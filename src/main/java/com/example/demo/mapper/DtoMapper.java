@@ -31,7 +31,8 @@ public class DtoMapper {
         dto.setVenueId(booking.getVenue().getId());
         dto.setTimeSlotId(booking.getTimeSlot().getId());
         dto.setCreatedAt(booking.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
-        dto.setVenueName(booking.getVenue().getName());        
+        dto.setVenueName(booking.getVenue().getName()); 
+        dto.setVenuePrice(booking.getVenue().getPrice());
         dto.setLabel(booking.getTimeSlot().getLabel());
         return dto;
     }
