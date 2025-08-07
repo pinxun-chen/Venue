@@ -26,16 +26,21 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional
     public void savePaymentRecord(PaymentData data) {
+    	
         Integer bookingId;
+        
+        // 將 order_no 轉為 Integer 作為 bookingId
         try {
             bookingId = Integer.parseInt(data.getOrder_no());
         } catch (NumberFormatException e) {
             throw new IllegalArgumentException("無效的 order_no : " + data.getOrder_no());
         }
 
+        // 根據 bookingId 查詢對應預約資料，若查無資料則丟出錯誤
         Booking booking = bookingRepository.findById(bookingId)
                 .orElseThrow(() -> new RuntimeException("找不到 Booking ID :" + bookingId));
 
+        // 建立 Payment 實體並填入資料
         Payment payment = new Payment();
         payment.setBooking(booking);
         payment.setOrderNo(data.getOrder_no());
@@ -54,15 +59,15 @@ public class PaymentServiceImpl implements PaymentService {
             throw new IllegalArgumentException("時間格式錯誤 :" + data.getPay_datetime());
         }
 
-        payment.setPayStatus(data.getPay_status());
-        payment.setPayStatusDesc(data.getPay_status_desc());
-        payment.setChannelId(data.getChannel_id());
-        payment.setChannelName(data.getChannel_name());
-        payment.setItemName(data.getItem_name());
+        payment.setPayStatus(data.getPay_status()); 		 // 付款狀態代碼，例如 "2" 表成功
+        payment.setPayStatusDesc(data.getPay_status_desc()); // 付款狀態說明
+        payment.setChannelId(data.getChannel_id()); 		 // 金流通道代碼
+        payment.setChannelName(data.getChannel_name()); 	 // 金流通道名稱
+        payment.setItemName(data.getItem_name()); 			 // 商品名稱
         
         // 如果付款狀態為成功，就把 booking.isPaid 設為 true
         if ("2".equals(data.getPay_status())) {
-            booking.setIsPaid(true);  // 確保你的 Booking Entity 有 isPaid 欄位
+            booking.setIsPaid(true);
         }
 
         paymentRepository.save(payment);
