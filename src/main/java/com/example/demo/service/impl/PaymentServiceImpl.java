@@ -30,7 +30,7 @@ public class PaymentServiceImpl implements PaymentService {
         try {
             bookingId = Integer.parseInt(data.getOrder_no());
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("無效的 order_no（非數字）: " + data.getOrder_no());
+            throw new IllegalArgumentException("無效的 order_no : " + data.getOrder_no());
         }
 
         Booking booking = bookingRepository.findById(bookingId)
