@@ -34,7 +34,7 @@ public class PaymentServiceImpl implements PaymentService {
         }
 
         Booking booking = bookingRepository.findById(bookingId)
-                .orElseThrow(() -> new RuntimeException("找不到 Booking ID: " + bookingId));
+                .orElseThrow(() -> new RuntimeException("找不到 Booking ID :" + bookingId));
 
         Payment payment = new Payment();
         payment.setBooking(booking);
@@ -44,14 +44,14 @@ public class PaymentServiceImpl implements PaymentService {
         try {
             payment.setPayAmount(Integer.parseInt(data.getPay_amount()));
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("金額格式錯誤: " + data.getPay_amount());
+            throw new IllegalArgumentException("金額格式錯誤 :" + data.getPay_amount());
         }
 
         try {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
             payment.setPayDatetime(LocalDateTime.parse(data.getPay_datetime(), formatter));
         } catch (Exception e) {
-            throw new IllegalArgumentException("時間格式錯誤: " + data.getPay_datetime());
+            throw new IllegalArgumentException("時間格式錯誤 :" + data.getPay_datetime());
         }
 
         payment.setPayStatus(data.getPay_status());
