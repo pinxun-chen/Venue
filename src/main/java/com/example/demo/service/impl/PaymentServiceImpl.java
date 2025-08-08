@@ -59,7 +59,7 @@ public class PaymentServiceImpl implements PaymentService {
             throw new IllegalArgumentException("時間格式錯誤 :" + data.getPay_datetime());
         }
 
-        payment.setPayStatus(data.getPay_status()); 		 // 付款狀態代碼，例如 "2" 表成功
+        payment.setPayStatus(data.getPay_status()); 		 // 付款狀態代碼， 2 表成功
         payment.setPayStatusDesc(data.getPay_status_desc()); // 付款狀態說明
         payment.setChannelId(data.getChannel_id()); 		 // 金流通道代碼
         payment.setChannelName(data.getChannel_name()); 	 // 金流通道名稱
