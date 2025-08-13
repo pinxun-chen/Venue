@@ -59,7 +59,7 @@ public class BillingExportService {
 				""";
 
 		LocalDate buildDate = LocalDate.now(ZoneId.of("Asia/Taipei"));
-	    String headerYmd = buildDate.format(D8);
+		String headerYmd = buildDate.format(D8);
 
 		ByteArrayOutputStream baos = new ByteArrayOutputStream();
 		baos.write(new byte[] { (byte) 0xEF, (byte) 0xBB, (byte) 0xBF }); // UTF-8 BOM（Excel 相容）
@@ -78,18 +78,14 @@ public class BillingExportService {
 				ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
 				ps.setTimestamp(2, Timestamp.valueOf(end.atStartOfDay()));
 			}, rs -> {
-				String txnDate = rs.getTimestamp("pay_datetime")
-						.toLocalDateTime()
-						.toLocalDate()
-						.format(D8);
-				
+				String txnDate = rs.getTimestamp("pay_datetime").toLocalDateTime().toLocalDate().format(D8);
+
 				long amount = rs.getLong("pay_amount");
 				long discount = 0L;
 				long actual = amount - discount;
 
 				// D,<交易日期>,<商店代號>,<交易序號留空>,<交易金額>,<折扣金額0>,<實際交易金額>
-				pw.printf("D,%s,%s,,%d,%d,%d%n", 
-						txnDate, merchantCode, amount, discount, actual);
+				pw.printf("D,%s,%s,,%d,%d,%d%n", txnDate, merchantCode, amount, discount, actual);
 
 				totalCount[0]++;
 				totalAmt[0] += actual; // 折扣都 0，= amount
@@ -104,10 +100,10 @@ public class BillingExportService {
 
 	/** 把 CSV bytes 落地到檔案，回傳完整路徑 */
 	public Path writeCsvToFile(LocalDate billDate, byte[] csvBytes) throws IOException {
-		
+
 		LocalDate buildDate = LocalDate.now(ZoneId.of("Asia/Taipei"));
-	    String ymd = buildDate.format(D8);
-	    
+		String ymd = buildDate.format(D8);
+
 		// 取商店主碼（P10012-1 -> P10012），若沒設就 fallback 成 P10012
 		String merchantForFile = (merchantCode != null && !merchantCode.isBlank()) ? merchantCode.split("-")[0]
 				: "P10012";
@@ -117,13 +113,45 @@ public class BillingExportService {
 
 		// 子資料夾名稱：日期
 		Path dir = Paths.get(outputDir, ymd);
-	    Files.createDirectories(dir);
+		Files.createDirectories(dir);
 
 		// 寫入檔案（若存在則覆蓋）
-	    Path file = dir.resolve(fname);
-	    Files.write(file, csvBytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-	    
-	    return file;
+		Path file = dir.resolve(fname);
+		Files.write(file, csvBytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+
+		return file;
+	}
+
+	
+	public record DailySummary(int totalCount, long totalAmount) {
+	}
+
+	public DailySummary getSummary(LocalDate billDate) {
+		LocalDate start = billDate;
+		LocalDate end = billDate.plusDays(1);
+
+		String sql = """
+				    SELECT COUNT(*) AS total_count,
+				           COALESCE(SUM(pay_amount), 0) AS sum_before
+				    FROM payments
+				    WHERE pay_datetime >= ? AND pay_datetime < ?
+				      AND (
+				           pay_status = 2
+				        OR pay_status = '2'
+				        OR pay_status_desc = N'繳費成功'
+				        OR pay_status = 'SUCCESS'
+				      )
+				""";
+
+		return jdbcTemplate.query(sql, ps -> {
+			ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
+			ps.setTimestamp(2, Timestamp.valueOf(end.atStartOfDay()));
+		}, rs -> {
+			if (rs.next()) {
+				return new DailySummary(rs.getInt("total_count"), rs.getLong("sum_before"));
+			}
+			return new DailySummary(0, 0L);
+		});
 	}
 
 }
