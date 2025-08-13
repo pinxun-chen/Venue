@@ -32,6 +32,7 @@ public class Payment {
     private Integer payAmount;
 
     private LocalDateTime payDatetime;
+    
     private String payStatus;
     
     private String payStatusDesc;

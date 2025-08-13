@@ -38,6 +38,9 @@ public class BillingExportService {
 	// 日期格式：yyyyMMdd
 	private static final DateTimeFormatter D8 = DateTimeFormatter.BASIC_ISO_DATE; // yyyyMMdd
 
+	// 日期格式：yyyyMMddHHmm
+	private static final DateTimeFormatter D12 = DateTimeFormatter.ofPattern("yyyyMMddHHmm"); // yyyyMMddHHmm
+
 	// 產生指定日期的 CSV 報表（傳回 byte[] 格式）
 	public byte[] generateCsvFor(LocalDate billDate) throws IOException {
 		// 查詢範圍：當天 00:00 ~ 隔天 00:00
@@ -46,14 +49,14 @@ public class BillingExportService {
 
 		// 交易明細查詢（只取成功）
 		String detailSql = """
-				    SELECT pay_datetime, pay_amount
+				    SELECT id, vnotice_no, pay_datetime, pay_amount
 				    FROM payments
 				    WHERE pay_datetime >= ? AND pay_datetime < ?
 				      AND (
 				           pay_status = 2
 				        OR pay_status = '2'
-				        OR pay_status_desc = N'繳費成功'
 				        OR pay_status = 'SUCCESS'
+				        OR pay_status_desc = N'繳費成功'
 				      )
 				    ORDER BY pay_datetime, id
 				""";
@@ -70,7 +73,7 @@ public class BillingExportService {
 			// H,<檔案日期>,<請款日期>
 			pw.printf("H,%s,%s%n", headerYmd, headerYmd);
 
-			// 逐筆輸出 D，同時計算總筆數與總金額
+			// 逐筆輸出，同時計算總筆數與總金額
 			final int[] totalCount = { 0 };
 			final long[] totalAmt = { 0 };
 
@@ -78,14 +81,25 @@ public class BillingExportService {
 				ps.setTimestamp(1, Timestamp.valueOf(start.atStartOfDay()));
 				ps.setTimestamp(2, Timestamp.valueOf(end.atStartOfDay()));
 			}, rs -> {
-				String txnDate = rs.getTimestamp("pay_datetime").toLocalDateTime().toLocalDate().format(D8);
+
+				// 交易唯一值：用 vnotice_no；若 DB 為空，就用「yyyyMMddHHmm + _ + id」退而求其次
+				String uniq = rs.getString("vnotice_no");
+				if (uniq == null || uniq.isBlank()) {
+					String t = rs.getTimestamp("pay_datetime").toLocalDateTime().format(D12);
+					uniq = "TXN_" + t + "_" + rs.getLong("id");
+				}
+				if (uniq.length() > 50)
+					uniq = uniq.substring(0, 50); // 長度上限 50
+
+				// 交易時間 yyyyMMddHHmm
+	            String txnTime = rs.getTimestamp("pay_datetime").toLocalDateTime().format(D12);
 
 				long amount = rs.getLong("pay_amount");
 				long discount = 0L;
 				long actual = amount - discount;
 
 				// D,<交易日期>,<商店代號>,<交易序號留空>,<交易金額>,<折扣金額0>,<實際交易金額>
-				pw.printf("D,%s,%s,,%d,%d,%d%n", txnDate, merchantCode, amount, discount, actual);
+				pw.printf("D,%s,%s,%s,,%d,%d,%d%n", uniq, txnTime, merchantCode, amount, discount, actual);
 
 				totalCount[0]++;
 				totalAmt[0] += actual; // 折扣都 0，= amount
@@ -122,7 +136,6 @@ public class BillingExportService {
 		return file;
 	}
 
-	
 	public record DailySummary(int totalCount, long totalAmount) {
 	}
 
