@@ -37,7 +37,9 @@ public class ReplyCsvImportServiceImpl implements ReplyCsvImportService {
 	@Override
 	@Transactional
 	public Integer importReplyCsv(Path path) {
-	    Charset cs = "MS950".equalsIgnoreCase(csvCharset) ? Charset.forName("MS950") : StandardCharsets.UTF_8;
+		
+	    Charset cs = "MS950".equalsIgnoreCase(csvCharset) ?
+	    		Charset.forName("MS950") : StandardCharsets.UTF_8;
 
 	    try (BufferedReader br = Files.newBufferedReader(path, cs)) {
 	        FileFooter footer = null;
@@ -56,10 +58,11 @@ public class ReplyCsvImportServiceImpl implements ReplyCsvImportService {
 	            line = line.trim();
 	            if (line.isEmpty()) continue;
 
+	            // 這裡以逗號分隔
 	            String[] cols = line.split(",", -1);
 	            if (cols.length == 0) continue;
 
-	            String tag = stripBom(cols[0]); // ← 關鍵：一定要用 tag 來判斷
+	            String tag = stripBom(cols[0]); // 用 tag 來判斷
 
 	            if ("F".equalsIgnoreCase(tag)) {
 	                // F, <總筆數>, <總金額>, <檔案日期>, <請款日期>
@@ -98,9 +101,6 @@ public class ReplyCsvImportServiceImpl implements ReplyCsvImportService {
 
 	                toInsert.add(d);
 	                inserted++;
-	            } else {
-	                // 非 D/F 的行，可視需要記錄
-	                // log.warn("Line {} ignored: {}", lineNo, line);
 	            }
 	        }
 
@@ -110,10 +110,13 @@ public class ReplyCsvImportServiceImpl implements ReplyCsvImportService {
 
 	        // 先存 F 取得 id，再關聯 D
 	        footer = fileFooterRepository.save(footer);
-	        for (FileDetail d : toInsert) d.setFooter(footer);
+	        for (FileDetail d : toInsert) {
+	        	d.setFooter(footer);
+	        }
+	        
 	        fileDetailRepository.saveAll(toInsert);
 
-	        // ---- 驗證：拿「原始檔案的 D 統計」對 F，比較貼近對帳邏輯 ----
+	        // 拿「原始檔案的 D 統計」對 F，比較貼近對帳邏輯
 	        if (enableValidation) {
 	            if (!footer.getTotalCount().equals(dCountAll)) {
 	                throw new IllegalStateException(
@@ -123,7 +126,7 @@ public class ReplyCsvImportServiceImpl implements ReplyCsvImportService {
 	            }
 	            if (!footer.getTotalAmount().equals(dSumAll)) {
 	                throw new IllegalStateException(
-	                        "F 總金額(" + footer.getTotalAmount() + ") ≠ D 請款加總(" + dSumAll + ")"
+	                        "F 總金額(" + footer.getTotalAmount() + ") != D 請款加總(" + dSumAll + ")"
 	                );
 	            }
 	        }

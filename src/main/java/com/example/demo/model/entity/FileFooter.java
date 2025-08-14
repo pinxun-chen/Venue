@@ -23,10 +23,10 @@ public class FileFooter {
     private Integer totalAmount;             // F: 總金額
 
     @Column(name = "file_date", nullable = false, length = 8)
-    private String fileDate;                 // F: 檔案日期 (yyyyMMdd)
+    private String fileDate;                 // F: 處理日期
 
     @Column(name = "pay_date", nullable = false, length = 8)
-    private String payDate;                  // F: 請款日期 (yyyyMMdd)
+    private String payDate;                  // F: 入帳日期
 
     @OneToMany(mappedBy = "footer", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
