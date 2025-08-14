@@ -22,7 +22,7 @@ public class ReplyFolderController {
     @PostMapping("/import-folder")
     public ResponseEntity<?> importByDate(@RequestParam String date) {
     	replyFolderImportService.importByDate(date);
-        return ResponseEntity.ok("資料夾 " + date + " 匯入完成");
+        return ResponseEntity.ok("資料 " + date + " 匯入完成");
     }
 }
 
