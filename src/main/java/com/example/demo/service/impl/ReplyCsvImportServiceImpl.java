@@ -1,152 +1,88 @@
 package com.example.demo.service.impl;
 
-import java.nio.file.Path;
-
-import com.example.demo.model.entity.FileDetail;
-import com.example.demo.model.entity.FileFooter;
-import com.example.demo.repository.FileDetailRepository;
-import com.example.demo.repository.FileFooterRepository;
+import com.example.demo.repository.PaymentRepository;
 import com.example.demo.service.ReplyCsvImportService;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.io.BufferedReader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.io.BufferedReader;
-import java.util.ArrayList;
-import java.util.List;
+import java.nio.file.*;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Service
 public class ReplyCsvImportServiceImpl implements ReplyCsvImportService {
 
-	@Autowired
-	private FileFooterRepository fileFooterRepository;
+    @Autowired
+    private PaymentRepository paymentRepository;
 
-	@Autowired
-	private FileDetailRepository fileDetailRepository;
+    @Value("${app.reply.charset:UTF-8}")
+    private String csvCharset;
 
-	private final boolean enableValidation = true;
+    /** 從 PRACTISE_REPLY CSV 讀出 (vnotice_no -> trade_seq) 與 F 的 entry_date，更新到 payments */
+    @Override
+    @Transactional
+    public Integer importReplyCsv(Path path) {
+        Charset cs = "MS950".equalsIgnoreCase(csvCharset) ? Charset.forName("MS950") : StandardCharsets.UTF_8;
 
-	@Value("${app.reply.charset:UTF-8}")
-	private String csvCharset;
+        String entryDate = null; // F 第5欄
+        // 用 Map 收集：key = vnotice_no(D第2欄)，value = trade_seq(D第5欄)
+        Map<String, String> rows = new LinkedHashMap<>();
 
-	@Override
-	@Transactional
-	public Integer importReplyCsv(Path path) {
-		
-	    Charset cs = "MS950".equalsIgnoreCase(csvCharset) ?
-	    		Charset.forName("MS950") : StandardCharsets.UTF_8;
+        try (BufferedReader br = Files.newBufferedReader(path, cs)) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.trim();
+                if (line.isEmpty()) continue;
 
-	    try (BufferedReader br = Files.newBufferedReader(path, cs)) {
-	        FileFooter footer = null;
-	        List<FileDetail> toInsert = new ArrayList<>();
+                String[] cols = line.split(",", -1);
+                if (cols.length == 0) continue;
 
-	        int dCountAll = 0;   // 原始檔案中的 D 筆數（含重複、最終不插入者）
-	        int dSumAll   = 0;   // 原始檔案中的 D 請款金額加總（含重複）
-	        int inserted  = 0;   // 真正要插入的筆數
-	        int skippedDup = 0;  // 因重複略過的筆數
+                String tag = stripBom(cols[0]);
 
-	        String line;
-	        int lineNo = 0;
+                if ("D".equalsIgnoreCase(tag)) {
+                    String vnoticeNo = cols[1].trim(); // 交易唯一值
+                    String tradeSeq  = cols[4].trim(); // 交易序號
+                    if (!vnoticeNo.isEmpty()) {
+                        rows.put(vnoticeNo, tradeSeq);
+                    }
+                } else if ("F".equalsIgnoreCase(tag)) {
+                    entryDate = cols[4].trim();        // 入帳日期 yyyyMMdd
+                }
+            }
 
-	        while ((line = br.readLine()) != null) {
-	            lineNo++;
-	            line = line.trim();
-	            if (line.isEmpty()) continue;
+            if (entryDate == null || entryDate.isEmpty()) {
+                throw new IllegalArgumentException("找不到檔尾(F)入帳日期：" + path.getFileName());
+            }
 
-	            // 這裡以逗號分隔
-	            String[] cols = line.split(",", -1);
-	            if (cols.length == 0) continue;
+            // 逐筆更新 payments
+            int updated = 0, notFound = 0;
+            for (Map.Entry<String, String> e : rows.entrySet()) {
+                String vnoticeNo = e.getKey();
+                String tradeSeq  = e.getValue();
 
-	            String tag = stripBom(cols[0]); // 用 tag 來判斷
+                int cnt = paymentRepository.updateSeqAndEntryDateByVnoticeNo(vnoticeNo, tradeSeq, entryDate);
+                if (cnt == 1) updated++;
+                else notFound++; // 找不到對應 vnotice_no 的付款單
+            }
 
-	            if ("F".equalsIgnoreCase(tag)) {
-	                // F, <總筆數>, <總金額>, <檔案日期>, <請款日期>
-	                footer = FileFooter.builder()
-	                        .totalCount(parseInt(cols[1]))
-	                        .totalAmount(parseInt(cols[2]))
-	                        .fileDate(cols[3])
-	                        .payDate(cols[4])
-	                        .build();
+            // 你也可以把 notFound 寫到 log 便於追蹤
+            // log.info("CSV {} 更新完成：updated={}, notFound={}", path.getFileName(), updated, notFound);
 
-	            } else if ("D".equalsIgnoreCase(tag)) {
-	                // D, <交易唯一>, <交易時間>, <商店>, <訂單>, <交易金額>, <折扣>, <請款金額>
-	                String tradeUniqueId = cols[1];
-	                int tradeAmount   = parseInt(cols[5]);
-	                int discountAmount= parseInt(cols[6]);
-	                int payAmount     = parseInt(cols[7]);
+            return updated; // 回傳成功更新的筆數
 
-	                // 不論是否重複，統計都要 +1 / +金額（用來與 F 比對）
-	                dCountAll++;
-	                dSumAll += payAmount;
+        } catch (Exception e) {
+            throw new RuntimeException("匯入 CSV 失敗（" + path.getFileName() + "）: " + e.getMessage(), e);
+        }
+    }
 
-	                if (fileDetailRepository.existsByTradeUniqueId(tradeUniqueId)) {
-	                    skippedDup++;
-	                    continue; // 重複則不新增
-	                }
-
-	                FileDetail d = FileDetail.builder()
-	                        .tradeUniqueId(tradeUniqueId)
-	                        .tradeTime(cols[2])
-	                        .merchantNo(cols[3])
-	                        .orderNo(cols[4])
-	                        .tradeAmount(tradeAmount)
-	                        .discountAmount(discountAmount)
-	                        .payAmount(payAmount)
-	                        .build();
-
-	                toInsert.add(d);
-	                inserted++;
-	            }
-	        }
-
-	        if (footer == null) {
-	            throw new IllegalArgumentException("找不到檔尾(F)資料: " + path.getFileName());
-	        }
-
-	        // 先存 F 取得 id，再關聯 D
-	        footer = fileFooterRepository.save(footer);
-	        for (FileDetail d : toInsert) {
-	        	d.setFooter(footer);
-	        }
-	        
-	        fileDetailRepository.saveAll(toInsert);
-
-	        // 拿「原始檔案的 D 統計」對 F，比較貼近對帳邏輯
-	        if (enableValidation) {
-	            if (!footer.getTotalCount().equals(dCountAll)) {
-	                throw new IllegalStateException(
-	                        "F 總筆數(" + footer.getTotalCount() + ") ≠ D 筆數(" + dCountAll + ") " +
-	                        "[實際新增=" + inserted + ", 重複略過=" + skippedDup + "]"
-	                );
-	            }
-	            if (!footer.getTotalAmount().equals(dSumAll)) {
-	                throw new IllegalStateException(
-	                        "F 總金額(" + footer.getTotalAmount() + ") != D 請款加總(" + dSumAll + ")"
-	                );
-	            }
-	        }
-
-	        return footer.getId();
-
-	    } catch (Exception e) {
-	        throw new RuntimeException("匯入 CSV 失敗（" + path.getFileName() + "）: " + e.getMessage(), e);
-	    }
-	}
-
-	
-	private String stripBom(String s) {
-	    if (s == null) return null;
-	    // \uFEFF 是 UTF-8 BOM
-	    return s.replace("\uFEFF", "");
-	}
-
-	private int parseInt(String s) {
-		return (s == null || s.isBlank()) ? 0 : Integer.parseInt(s.trim());
-	}
-
+    private String stripBom(String s) {
+        if (s == null) return null;
+        return s.replace("\uFEFF", "");
+    }
 }

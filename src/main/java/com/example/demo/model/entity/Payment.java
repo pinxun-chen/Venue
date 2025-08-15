@@ -44,4 +44,8 @@ public class Payment {
     private String itemName;
 
     private LocalDateTime createdAt = LocalDateTime.now();
+    
+    private String tradeSeq;
+    
+    private String entryDate;
 }
